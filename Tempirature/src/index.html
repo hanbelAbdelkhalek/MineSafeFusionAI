@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IoT Sensor Dashboard</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js for data visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        dark: '#0f172a',
+                        card: '#1e293b',
+                        primary: '#3b82f6',
+                        temp: '#ef4444',
+                        hum: '#06b6d4',
+                        press: '#10b981'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+        }
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .loader {
+            border: 3px solid rgba(255,255,255,0.1);
+            border-radius: 50%;
+            border-top: 3px solid #3b82f6;
+            width: 24px;
+            height: 24px;
+            -webkit-animation: spin 1s linear infinite; /* Safari */
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8 selection:bg-primary selection:text-white">
+
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+            <div>
+                <h1 class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">
+                    <i class="fa-solid fa-satellite-dish mr-2 text-blue-400"></i>Sensor Live Data
+                </h1>
+                <p class="text-slate-400 mt-1 text-sm">Real-time telemetry from Google Sheets</p>
+            </div>
+            <div id="status-badge" class="flex items-center gap-2 px-4 py-2 rounded-full glass-panel text-sm font-medium text-slate-300">
+                <div class="loader mr-2" id="loader-icon"></div>
+                <span id="status-text">Fetching data...</span>
+            </div>
+        </header>
+
+        <!-- KPI Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <!-- Temperature Card -->
+            <div class="glass-panel rounded-2xl p-6 relative overflow-hidden group hover:border-temp/30 transition-colors">
+                <div class="absolute -right-6 -top-6 text-temp/10 text-9xl group-hover:scale-110 transition-transform">
+                    <i class="fa-solid fa-temperature-half"></i>
+                </div>
+                <div class="relative z-10">
+                    <h3 class="text-slate-400 font-medium mb-1 uppercase tracking-wider text-xs">Temperature</h3>
+                    <div class="flex items-baseline gap-2">
+                        <span id="val-temp" class="text-4xl font-bold text-white">--</span>
+                        <span class="text-temp font-semibold text-lg">°C</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Humidity Card -->
+            <div class="glass-panel rounded-2xl p-6 relative overflow-hidden group hover:border-hum/30 transition-colors">
+                <div class="absolute -right-6 -top-6 text-hum/10 text-9xl group-hover:scale-110 transition-transform">
+                    <i class="fa-solid fa-droplet"></i>
+                </div>
+                <div class="relative z-10">
+                    <h3 class="text-slate-400 font-medium mb-1 uppercase tracking-wider text-xs">Humidity</h3>
+                    <div class="flex items-baseline gap-2">
+                        <span id="val-hum" class="text-4xl font-bold text-white">--</span>
+                        <span class="text-hum font-semibold text-lg">%</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pressure Card -->
+            <div class="glass-panel rounded-2xl p-6 relative overflow-hidden group hover:border-press/30 transition-colors">
+                <div class="absolute -right-6 -top-6 text-press/10 text-9xl group-hover:scale-110 transition-transform">
+                    <i class="fa-solid fa-gauge-high"></i>
+                </div>
+                <div class="relative z-10">
+                    <h3 class="text-slate-400 font-medium mb-1 uppercase tracking-wider text-xs">Pressure</h3>
+                    <div class="flex items-baseline gap-2">
+                        <span id="val-press" class="text-4xl font-bold text-white">--</span>
+                        <span class="text-press font-semibold text-lg">hPa</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chart Section -->
+        <div class="glass-panel rounded-2xl p-6 w-full mb-8">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-semibold"><i class="fa-solid fa-chart-line mr-2 text-slate-400"></i>Historical Trends</h2>
+            </div>
+            <div class="relative h-[400px] w-full">
+                <canvas id="telemetryChart"></canvas>
+            </div>
+        </div>
+        
+        <!-- Raw Data Preview (Optional/Collapsible) -->
+        <div class="glass-panel rounded-2xl p-6 w-full">
+            <h2 class="text-lg font-semibold mb-4 text-slate-300"><i class="fa-solid fa-table mr-2"></i>Latest Records</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b border-slate-700 text-slate-400 text-sm">
+                            <th class="pb-3 pr-4 font-medium">Record #</th>
+                            <th class="pb-3 pr-4 font-medium">Temperature (°C)</th>
+                            <th class="pb-3 pr-4 font-medium">Humidity (%)</th>
+                            <th class="pb-3 font-medium">Pressure (hPa)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body" class="text-sm text-slate-200">
+                        <!-- Rows will be injected here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // The Google Sheets CSV URL provided by the user
+        const SPREADSHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRqcvfRHv5QA1r7owt_OuirSgNXQax6CAsMOOqh0jNZyWngZHyiCUWtPmW52CQA7RlSjT4FkQMGcdGx/pub?gid=0&single=true&output=csv';
+        let chartInstance = null;
+
+        async function fetchAndRenderData() {
+            try {
+                const response = await fetch(SPREADSHEET_URL);
+                if (!response.ok) throw new Error('Network response was not ok');
+                
+                const csvText = await response.text();
+                processData(csvText);
+                
+                // Update Status UI
+                document.getElementById('loader-icon').style.display = 'none';
+                const statusText = document.getElementById('status-text');
+                statusText.innerText = 'Live - Data Synced';
+                statusText.classList.add('text-emerald-400');
+                
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                document.getElementById('loader-icon').style.display = 'none';
+                const statusBadge = document.getElementById('status-badge');
+                statusBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-red-400 mr-2"></i><span class="text-red-400">Connection Failed</span>';
+            }
+        }
+
+        function processData(csvText) {
+            // Split by newline and filter out empty rows
+            const rows = csvText.split('\n').map(row => row.trim()).filter(row => row.length > 0);
+            
+            if (rows.length === 0) return;
+
+            let startIndex = 0;
+            // Check if the first row contains headers (text) instead of numbers
+            const firstCols = rows[0].split(',');
+            if (isNaN(parseFloat(firstCols[0].replace(/['"]+/g, '')))) {
+                startIndex = 1;
+            }
+
+            const parsedData = [];
+            const labels = [];
+            const tempData = [];
+            const humData = [];
+            const pressData = [];
+
+            // Parse rows backwards to get newest data, or loop through all
+            for (let i = startIndex; i < rows.length; i++) {
+                const cols = rows[i].split(',').map(c => c.replace(/['"]+/g, '').trim());
+                
+                // Adaptive column parsing based on typical IoT logs (Timestamp, Temp, Hum, Press or just Temp, Hum, Press)
+                let temp, hum, press;
+                
+                if (cols.length >= 4) {
+                    temp = parseFloat(cols[1]);
+                    hum = parseFloat(cols[2]);
+                    press = parseFloat(cols[3]);
+                } else if (cols.length >= 3) {
+                    temp = parseFloat(cols[0]);
+                    hum = parseFloat(cols[1]);
+                    press = parseFloat(cols[2]);
+                }
+
+                if (!isNaN(temp) && !isNaN(hum) && !isNaN(press)) {
+                    parsedData.push({
+                        id: i - startIndex + 1,
+                        temp: temp,
+                        hum: hum,
+                        press: press
+                    });
+                    
+                    labels.push(`Read ${i - startIndex + 1}`);
+                    tempData.push(temp);
+                    humData.push(hum);
+                    pressData.push(press);
+                }
+            }
+
+            if (parsedData.length === 0) return;
+
+            // --- Update KPI Cards (Latest Reading) ---
+            const latest = parsedData[parsedData.length - 1];
+            
+            // Animate numbers
+            animateValue("val-temp", latest.temp, 2);
+            animateValue("val-hum", latest.hum, 1);
+            animateValue("val-press", latest.press, 1);
+
+            // --- Update Chart ---
+            updateChart(labels, tempData, humData, pressData);
+
+            // --- Update Table (Last 5 readings) ---
+            updateTable(parsedData.slice(-5).reverse());
+        }
+
+        function animateValue(id, end, decimals) {
+            const obj = document.getElementById(id);
+            obj.innerHTML = end.toFixed(decimals);
+        }
+
+        function updateTable(dataArr) {
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
+            
+            dataArr.forEach((row, index) => {
+                const tr = document.createElement('tr');
+                tr.className = 'border-b border-slate-700/50 hover:bg-slate-800/50 transition-colors';
+                tr.innerHTML = `
+                    <td class="py-3 pr-4 text-slate-400">#${row.id}</td>
+                    <td class="py-3 pr-4 font-medium text-temp">${row.temp.toFixed(2)}</td>
+                    <td class="py-3 pr-4 font-medium text-hum">${row.hum.toFixed(2)}</td>
+                    <td class="py-3 font-medium text-press">${row.press.toFixed(2)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function updateChart(labels, temp, hum, press) {
+            const ctx = document.getElementById('telemetryChart').getContext('2d');
+            
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            // Create gradients
+            const gradientTemp = ctx.createLinearGradient(0, 0, 0, 400);
+            gradientTemp.addColorStop(0, 'rgba(239, 68, 68, 0.5)');
+            gradientTemp.addColorStop(1, 'rgba(239, 68, 68, 0.0)');
+
+            const gradientHum = ctx.createLinearGradient(0, 0, 0, 400);
+            gradientHum.addColorStop(0, 'rgba(6, 182, 212, 0.5)');
+            gradientHum.addColorStop(1, 'rgba(6, 182, 212, 0.0)');
+
+            Chart.defaults.color = '#94a3b8';
+            Chart.defaults.font.family = 'Inter';
+
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Temperature (°C)',
+                            data: temp,
+                            borderColor: '#ef4444',
+                            backgroundColor: gradientTemp,
+                            borderWidth: 2,
+                            pointBackgroundColor: '#0f172a',
+                            pointBorderColor: '#ef4444',
+                            pointBorderWidth: 2,
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                            fill: true,
+                            tension: 0.4,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Humidity (%)',
+                            data: hum,
+                            borderColor: '#06b6d4',
+                            backgroundColor: gradientHum,
+                            borderWidth: 2,
+                            pointBackgroundColor: '#0f172a',
+                            pointBorderColor: '#06b6d4',
+                            pointBorderWidth: 2,
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                            fill: true,
+                            tension: 0.4,
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                boxWidth: 8
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                            titleColor: '#fff',
+                            bodyColor: '#cbd5e1',
+                            borderColor: 'rgba(255,255,255,0.1)',
+                            borderWidth: 1,
+                            padding: 12,
+                            boxPadding: 6
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.05)',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                maxTicksLimit: 10
+                            }
+                        },
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: 'Temperature (°C)',
+                                color: '#ef4444'
+                            },
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.05)',
+                                drawBorder: false
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: {
+                                display: true,
+                                text: 'Humidity (%)',
+                                color: '#06b6d4'
+                            },
+                            grid: {
+                                drawOnChartArea: false, 
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', fetchAndRenderData);
+        
+        // Auto-refresh every 30 seconds (optional)
+        // setInterval(fetchAndRenderData, 30000);
+    </script>
+</body>
+</html>

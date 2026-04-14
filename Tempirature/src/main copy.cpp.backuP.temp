@@ -1,0 +1,89 @@
+#include <Arduino.h>
+#include <Adafruit_BME280.h>
+#include <WiFi.h>
+#include <PubSubClient.h>
+#include <ArduinoJson.h> 
+
+Adafruit_BME280 capteur;
+WiFiClient reseau;
+PubSubClient mqtt(reseau);
+
+void demarrerLeCapteur() {
+  // L'adresse I2C dial BME280 katkon 0x76 wla 0x77
+  if (!capteur.begin(0x76) && !capteur.begin(0x77)) {
+    Serial.println("Erreur : Capteur BME280 introuvable !");
+  }
+}
+
+void demarrerInternet() {
+  WiFi.begin("x", "12345678900"); // Modifie b السمية dial WiFi dyalek
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nConnecté au WiFi !");
+  mqtt.setServer("broker.hivemq.com", 1883);
+}
+
+void envoyerTroisVariables() {
+  mqtt.loop();
+  
+  // Lecture des données
+  float t = capteur.readTemperature();
+  float h = capteur.readHumidity();
+  float p = capteur.readPressure() / 100.0F;
+
+  // Création du message au format JSON avec mémoire pré-allouée
+  StaticJsonDocument<200> doc;
+  doc["temperature"] = t;
+  doc["humidite"] = h;
+  doc["pression"] = p;
+
+  char buffer[256];
+  serializeJson(doc, buffer);
+
+  // Envoi sur le topic MQTT spécifique
+  mqtt.publish("capteur/abdo", buffer);
+  Serial.print("JSON envoyé : ");
+  Serial.println(buffer);
+}
+
+void direTemperature() {
+  Serial.print("Temperature: ");
+  Serial.println(capteur.readTemperature());
+}
+
+void direHumidite() {
+  Serial.print("Humidite: ");
+  Serial.println(capteur.readHumidity());
+}
+
+void direPression() {
+  Serial.print("Pression: ");
+  Serial.println(capteur.readPressure() / 100.0F);
+}
+
+void faireUnePause() {
+  Serial.println("---");
+  delay(1000);
+}
+
+void setup() {
+  Serial.begin(115200);
+  demarrerLeCapteur();
+  demarrerInternet();
+}
+
+void loop() {
+  if (!mqtt.connected()) {
+    mqtt.connect("StationMeteo_ESP32");
+  }
+  
+  direTemperature();
+  direHumidite();
+  direPression();
+  
+  // Envoi groupé en JSON
+  envoyerTroisVariables();
+  faireUnePause();
+}

@@ -1,0 +1,61 @@
+#include <Arduino.h>
+#include <Wire.h>
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
+
+Adafruit_MPU6050 mpu;
+
+void setup() {
+  Serial.begin(115200);
+  while (!Serial) {
+    delay(10);
+  }
+
+  Serial.println("\nInitialisation dyal MPU6050...");
+
+  // Configuration dyal les pins I2C
+  Wire.begin(21, 22);
+
+  // Démarrer le capteur b l'adresse li l9ina (0x69)
+  if (!mpu.begin(0x69)) {
+    Serial.println("Erreur: MPU6050 ma bghach ydemarri f l'adresse 0x69!");
+    while (1) {
+      delay(10);
+    }
+  }
+  
+  Serial.println("MPU6050 connecté b naja7 f l'adresse 0x69 !");
+
+  // Configuration dyal la sensibilité
+  mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
+  mpu.setGyroRange(MPU6050_RANGE_500_DEG);
+  mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
+  
+  Serial.println("");
+  delay(500);
+}
+
+void loop() {
+  sensors_event_t a, g, temp;
+  mpu.getEvent(&a, &g, &temp);
+
+  // 1. Accélération (X, Y, Z) f m/s^2
+  Serial.print("Accélération -> X: "); Serial.print(a.acceleration.x);
+  Serial.print(" | Y: "); Serial.print(a.acceleration.y);
+  Serial.print(" | Z: "); Serial.print(a.acceleration.z);
+  Serial.println(" m/s^2");
+
+  // 2. Rotation / Gyroscope (X, Y, Z) f rad/s
+  Serial.print("Rotation     -> X: "); Serial.print(g.gyro.x);
+  Serial.print(" | Y: "); Serial.print(g.gyro.y);
+  Serial.print(" | Z: "); Serial.print(g.gyro.z);
+  Serial.println(" rad/s");
+
+  // 3. Température
+  Serial.print("Température  -> "); Serial.print(temp.temperature);
+  Serial.println(" °C");
+
+  Serial.println("-----------------------------------------");
+  
+  delay(500);
+}

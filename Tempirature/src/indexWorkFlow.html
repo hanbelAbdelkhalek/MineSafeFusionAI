@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Hospital Monitor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background-color: #f3f4f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .card-hover:hover { transform: translateY(-5px); transition: all 0.3s ease; }
+        .blink { animation: blinker 1s linear infinite; }
+        @keyframes blinker { 50% { opacity: 0; } }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <nav class="bg-slate-900 text-white p-4 shadow-lg sticky top-0 z-50">
+        <div class="container mx-auto flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <i class="fa-solid fa-heart-pulse text-red-500 text-2xl"></i>
+                <h1 class="text-xl font-bold tracking-wider">SMART HOSPITAL <span class="font-light">MONITOR</span></h1>
+            </div>
+            <div id="connection-status" class="flex items-center text-sm font-semibold text-green-400">
+                <i class="fa-solid fa-circle text-[10px] mr-2 blink"></i> En direct (Live)
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto p-6">
+        
+        <div id="danger-alert" class="hidden mb-6 bg-red-600 text-white p-4 rounded-xl shadow-lg flex items-center justify-between border-l-8 border-red-900">
+            <div class="flex items-center">
+                <i class="fa-solid fa-triangle-exclamation text-3xl mr-4 blink"></i>
+                <div>
+                    <h2 class="text-xl font-bold uppercase">Alerte Critique !</h2>
+                    <p id="alert-reason" class="text-sm opacity-90">Intervention médicale requise immédiatement.</p>
+                </div>
+            </div>
+            <div class="text-right">
+                <p class="text-xs font-bold uppercase opacity-75">Statut de la salle</p>
+                <p class="text-2xl font-black">DANGER</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+            <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100 card-hover relative overflow-hidden">
+                <div class="absolute -right-4 -top-4 opacity-10 text-orange-500"><i class="fa-solid fa-temperature-half text-8xl"></i></div>
+                <p class="text-gray-500 text-sm font-semibold uppercase">Température</p>
+                <div class="flex items-end mt-2">
+                    <span id="val-temp" class="text-4xl font-bold text-gray-800">--</span>
+                    <span class="text-xl text-gray-500 ml-1 mb-1">°C</span>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100 card-hover relative overflow-hidden">
+                <div class="absolute -right-4 -top-4 opacity-10 text-blue-500"><i class="fa-solid fa-droplet text-8xl"></i></div>
+                <p class="text-gray-500 text-sm font-semibold uppercase">Humidité</p>
+                <div class="flex items-end mt-2">
+                    <span id="val-hum" class="text-4xl font-bold text-gray-800">--</span>
+                    <span class="text-xl text-gray-500 ml-1 mb-1">%</span>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100 card-hover relative overflow-hidden">
+                <div class="absolute -right-4 -top-4 opacity-10 text-purple-500"><i class="fa-solid fa-cloud text-8xl"></i></div>
+                <p class="text-gray-500 text-sm font-semibold uppercase">Pression</p>
+                <div class="flex items-end mt-2">
+                    <span id="val-pres" class="text-4xl font-bold text-gray-800">--</span>
+                    <span class="text-xl text-gray-500 ml-1 mb-1">hPa</span>
+                </div>
+            </div>
+
+            <div id="card-sos" class="bg-white rounded-xl p-6 shadow-sm border border-gray-100 card-hover flex flex-col justify-center items-center">
+                <p class="text-gray-500 text-sm font-semibold uppercase mb-2">Bouton SOS</p>
+                <span id="val-sos" class="px-4 py-1 rounded-full text-sm font-bold bg-gray-100 text-gray-500">Désactivé</span>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2 bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                <h3 class="text-gray-700 font-bold mb-4 uppercase text-sm"><i class="fa-solid fa-chart-line mr-2"></i>Évolution de la Température</h3>
+                <canvas id="tempChart" height="100"></canvas>
+            </div>
+
+            <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100 overflow-hidden flex flex-col">
+                <h3 class="text-gray-700 font-bold mb-4 uppercase text-sm"><i class="fa-solid fa-clock-rotate-left mr-2"></i>Historique Récent</h3>
+                <div class="overflow-y-auto flex-grow" style="max-height: 300px;">
+                    <table class="w-full text-left text-sm">
+                        <tbody id="history-table" class="divide-y divide-gray-100">
+                            <tr><td class="py-4 text-center text-gray-400">Chargement des données...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 🔴🔴🔴 7ET LIEN CSV DYALK HNA 🔴🔴🔴
+        const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRqcvfRHv5QA1r7owt_OuirSgNXQax6CAsMOOqh0jNZyWngZHyiCUWtPmW52CQA7RlSjT4FkQMGcdGx/pub?gid=0&single=true&output=csv';
+
+        let myChart;
+
+        async function fetchHospitalData() {
+            try {
+                const response = await fetch(CSV_URL);
+                const data = await response.text();
+                
+                // Nqesmo l-data
+                const rows = data.split('\n').map(row => row.split(','));
+                
+                // N7iydo l-ligne l-lowla (Headers) ila kant, w nakhdo ghir les lignes lli fihom data
+                const validRows = rows.filter(row => row.length >= 7 && row[0] !== '');
+                
+                if(validRows.length === 0) return;
+
+                // Nakhdo l-ligne l-lekhra ga3 (Li fiha a7dath data)
+                const lastRow = validRows[validRows.length - 1];
+                
+                // 3la 7sab tsawer dyalk, t-tartib howa: [0]Date, [1]Device, [2]Temp, [3]Hum, [4]Pres, [5]SOS, [6]Status, [7]IA_Verdict
+                const date = lastRow[0];
+                const temp = parseFloat(lastRow[2]).toFixed(1);
+                const hum = parseFloat(lastRow[3]).toFixed(1);
+                const pres = parseFloat(lastRow[4]).toFixed(1);
+                const sos = lastRow[5].trim().toUpperCase() === 'TRUE';
+                const status = lastRow[6].trim().toUpperCase();
+                const aiVerdict = lastRow[7] ? lastRow[7].replace(/"/g, '') : 'En attente...';
+
+                // 1. Mettre à jour les Cartes
+                document.getElementById('val-temp').innerText = isNaN(temp) ? '--' : temp;
+                document.getElementById('val-hum').innerText = isNaN(hum) ? '--' : hum;
+                document.getElementById('val-pres').innerText = isNaN(pres) ? '--' : pres;
+
+                // SOS Update
+                const sosCard = document.getElementById('card-sos');
+                const sosVal = document.getElementById('val-sos');
+                if(sos) {
+                    sosCard.classList.add('bg-red-50', 'border-red-200');
+                    sosVal.className = 'px-4 py-1 rounded-full text-sm font-bold bg-red-600 text-white blink';
+                    sosVal.innerText = 'ACTIVÉ !';
+                } else {
+                    sosCard.classList.remove('bg-red-50', 'border-red-200');
+                    sosVal.className = 'px-4 py-1 rounded-full text-sm font-bold bg-gray-100 text-gray-500';
+                    sosVal.innerText = 'Désactivé';
+                }
+
+                // Danger Alert Box
+                const alertBox = document.getElementById('danger-alert');
+                const alertReason = document.getElementById('alert-reason');
+                if(status === 'DANGER') {
+                    alertBox.classList.remove('hidden');
+                    alertReason.innerText = aiVerdict !== 'undefined' ? aiVerdict : 'Paramètres critiques détectés !';
+                    document.getElementById('val-temp').classList.add('text-red-600');
+                } else {
+                    alertBox.classList.add('hidden');
+                    document.getElementById('val-temp').classList.remove('text-red-600');
+                }
+
+                // 2. Mettre à jour le Graphique (Aakhiran 15 qir2a)
+                const recentRows = validRows.slice(-15);
+                const labels = recentRows.map(r => {
+                    let d = r[0].split(' '); 
+                    return d[1] ? d[1].substring(0,5) : d[0]; // Jbed ghir Sa3a
+                });
+                const tempValues = recentRows.map(r => parseFloat(r[2]));
+
+                updateChart(labels, tempValues);
+
+                // 3. Mettre à jour l'Historique (Table)
+                const tbody = document.getElementById('history-table');
+                tbody.innerHTML = '';
+                // N9elbohoum bach jdid yban lfoq (Nakhdo akhir 10)
+                const tableRows = [...recentRows].reverse().slice(0, 10);
+                
+                tableRows.forEach(r => {
+                    let rDate = r[0].split(' ')[1] || r[0]; // Sa3a
+                    let rTemp = parseFloat(r[2]).toFixed(1);
+                    let rStatus = r[6].trim().toUpperCase();
+                    
+                    let statusBadge = rStatus === 'DANGER' 
+                        ? `<span class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-bold">DANGER</span>`
+                        : `<span class="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-bold">SAFE</span>`;
+
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-slate-50">
+                            <td class="py-3 text-gray-500 text-xs font-mono">${rDate}</td>
+                            <td class="py-3 font-bold text-gray-800">${rTemp}°C</td>
+                            <td class="py-3 text-right">${statusBadge}</td>
+                        </tr>
+                    `;
+                });
+
+            } catch (error) {
+                console.error('Erreur:', error);
+                document.getElementById('connection-status').innerHTML = '<i class="fa-solid fa-circle text-[10px] mr-2 text-red-500"></i> Déconnecté';
+                document.getElementById('connection-status').classList.replace('text-green-400', 'text-red-500');
+            }
+        }
+
+        function updateChart(labels, data) {
+            const ctx = document.getElementById('tempChart').getContext('2d');
+            
+            if (myChart) {
+                myChart.data.labels = labels;
+                myChart.data.datasets[0].data = data;
+                myChart.update();
+            } else {
+                myChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Température (°C)',
+                            data: data,
+                            borderColor: '#ef4444', // Red
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            borderWidth: 3,
+                            tension: 0.4, // Ykhelik lkhet mziwen (smooth)
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            y: { suggestedMin: 20, suggestedMax: 35 }
+                        }
+                    }
+                });
+            }
+        }
+
+        // Bda mlli t-t-chargi l-page, w bqa t-jbed data j-jdida kol 5 tawanin (Real-time effect)
+        window.onload = () => {
+            fetchHospitalData();
+            setInterval(fetchHospitalData, 5000); 
+        };
+    </script>
+</body>
+</html>
